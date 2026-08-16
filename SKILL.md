@@ -47,6 +47,7 @@ $S/refresh.sh --check   # compare local vs remote, change nothing
 $S/refresh.sh --force   # rebuild regardless
 $S/refresh.sh --keep-raw # keep the .tsv.gz dumps (default: delete them)
 $S/smoke.sh             # 32 assertions; run after every refresh
+$S/smoke.sh --tmdb      # + 5 checks against the live TMDb API (3 requests)
 ```
 
 Measured: ~62 s total (1.9 GB download + 35 s build). IMDb publishes around

@@ -3,6 +3,8 @@
 #
 #   smoke.sh          # all checks, one line each
 #   smoke.sh -q       # only failures
+#   smoke.sh --tmdb   # additionally hit the real TMDb API (needs a token,
+#                     # costs 3 requests) and check the enrichment path
 #
 # Every check is a boolean SQL expression. Thresholds are deliberately loose
 # where IMDb data drifts daily (ratings, row counts) and exact where a wrong
@@ -11,7 +13,14 @@ set -uo pipefail
 
 DATA_DIR="${IMDB_DATA_DIR:-$HOME/.local/share/imdb}"
 DB="$DATA_DIR/imdb.duckdb"
-QUIET=0; [[ "${1:-}" == "-q" ]] && QUIET=1
+QUIET=0; TMDB=0
+for a in "$@"; do
+  case "$a" in
+    -q) QUIET=1 ;;
+    --tmdb) TMDB=1 ;;
+    -h|--help) sed -n '2,10p' "$0"; exit 0 ;;
+  esac
+done
 [[ -f "$DB" ]] || { echo "no database at $DB — run refresh.sh" >&2; exit 1; }
 
 pass=0; fail=0
@@ -74,6 +83,43 @@ check "principals->names dangling < 50k" \
   "(SELECT count(*) FROM (SELECT DISTINCT nconst FROM title_principals) p ANTI JOIN name_basics n USING (nconst)) < 50000"
 check "akas->basics dangling < 50k" \
   "(SELECT count(*) FROM (SELECT DISTINCT titleId AS tconst FROM title_akas) a ANTI JOIN title_basics b USING (tconst)) < 50000"
+
+if (( TMDB )); then
+  echo "== tmdb enrichment (live API) =="
+  # Checked against the real service, not a stand-in: the only thing worth
+  # knowing is whether TMDb still answers in the shape the fetcher expects.
+  SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  TOKEN="${TMDB_TOKEN:-}"
+  [[ -z "$TOKEN" && -n "${TMDB_TOKEN_FILE:-}" && -f "$TMDB_TOKEN_FILE" ]] && TOKEN=$(tr -d '[:space:]' < "$TMDB_TOKEN_FILE")
+  [[ -z "$TOKEN" && -f "$DATA_DIR/tmdb.token" ]] && TOKEN=$(tr -d '[:space:]' < "$DATA_DIR/tmdb.token")
+  if [[ -z "$TOKEN" ]]; then
+    echo "  SKIP  no TMDb token — see 'Getting a TMDb token' in SKILL.md" >&2
+  else
+    OUT=$(printf 'tt1375666\ntt0944947\n' \
+          | python3 "$SCRIPT_DIR/tmdb_fetch.py" --token "$TOKEN" --full 2>/dev/null || true)
+    jq_get() { python3 -c "
+import json,sys
+want=sys.argv[1]
+for l in sys.stdin:
+    r=json.loads(l)
+    if r['tconst']==want: print(json.dumps(r)); break
+" "$1" <<<"$OUT"; }
+    HIT=$(jq_get tt1375666); MISS=$(jq_get tt0944947)
+    pycheck() { python3 -c "
+import json,sys
+r=json.loads(sys.argv[1] or '{}')
+print('true' if eval(sys.argv[2], {'r': r}) else f'got {r.get(sys.argv[3])!r}')
+" "$1" "$2" "$3" 2>/dev/null || echo "no response"; }
+    livecheck() { local name=$1 got; got=$(pycheck "$2" "$3" "$4")
+      if [[ "$got" == "true" ]]; then (( QUIET )) || printf '  ok    %s\n' "$name"; ((pass++))
+      else printf '  FAIL  %s -> %s\n' "$name" "$got" >&2; ((fail++)); fi; }
+    livecheck "movie resolves by imdb id" "$HIT" "r.get('_kind')=='hit' and r.get('tmdb_id')==27205" "_kind"
+    livecheck "overview arrives"          "$HIT" "bool(r.get('overview'))" "overview"
+    livecheck "full fetch fills runtime"  "$HIT" "isinstance(r.get('runtime'), int) and r['runtime']>0" "runtime"
+    livecheck "keywords parsed"           "$HIT" "isinstance(r.get('keywords'), list) and len(r['keywords'])>0" "keywords"
+    livecheck "series is a miss"          "$MISS" "r.get('_kind')=='miss' and r.get('reason')=='series'" "reason"
+  fi
+fi
 
 echo
 echo "$pass passed, $fail failed"

@@ -21,7 +21,6 @@ The efficiency rules this encodes, which are the whole point of the file:
 
 import argparse
 import json
-import os
 import sys
 import threading
 import time
@@ -30,9 +29,7 @@ import urllib.parse
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 
-# Overridable so the fetch path can be tested against a local mock without a
-# real token. Leave unset in normal use.
-BASE = os.environ.get("TMDB_API_BASE", "https://api.themoviedb.org/3")
+BASE = "https://api.themoviedb.org/3"
 
 
 class Limiter:
