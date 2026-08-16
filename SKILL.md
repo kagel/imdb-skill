@@ -66,7 +66,7 @@ identifiers are case-insensitive, so `titletype` works too.
 
 | Table | Rows | Columns |
 |---|---|---|
-| `title_basics` | 12.7M | tconst, titleType, primaryTitle, originalTitle, isAdult, startYear, endYear, runtimeMinutes, **genres[]** |
+| `title_basics` | 12.72M | tconst, titleType, primaryTitle, originalTitle, isAdult, startYear, endYear, runtimeMinutes, **genres[]** |
 | `title_ratings` | 1.7M | tconst, averageRating, numVotes |
 | `title_akas` | 59.0M | titleId, ordering, title, region, language, **types[]**, **attributes[]**, isOriginalTitle |
 | `title_crew` | 12.7M | tconst, **directors[]**, **writers[]** (nconst lists) |
@@ -172,12 +172,21 @@ All numbers below were measured on the 2026-08-16 build, not assumed.
 
 ### The seven files are not one snapshot
 
-They are published minutes to a day apart — in this release `title.basics`
-carries a 2026-08-15 timestamp while the rest are 2026-08-16. Consequences:
-1,169 tconsts and 3,214 nconsts referenced by `title_principals` do not exist
-in `title_basics`/`name_basics`, so the `credits` view (inner joins) drops
-~13.8k rows and `episodes` drops 651. That is normal; `smoke.sh` fails only if
-the dangling count exceeds 50k, which would mean a genuinely broken download.
+They are published minutes to a day apart, and `refresh.sh` takes whatever is
+current for each file. Measured both ways on 2026-08-16:
+
+| | `title.basics` a day behind | all seven aligned |
+|---|---:|---:|
+| principals → basics dangling | 1,169 | **0** |
+| principals → names dangling | 3,214 | 3,214 |
+| rows dropped by `credits` | 13,771 | 7,000 |
+
+So a stale file adds dangling ids, but ~3.2k nconsts referenced by
+`title_principals` are missing from `name_basics` even within one aligned
+release — that is IMDb's own inconsistency and never goes away. `credits` and
+`episodes` are inner joins, so those rows silently vanish. `smoke.sh` fails
+only above 50k, which would mean a genuinely broken download rather than
+normal drift.
 
 ### DuckDB gotchas
 
