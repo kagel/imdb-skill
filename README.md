@@ -18,12 +18,25 @@ anything you charge money for on top of it.
 
 ## Install
 
-Unpack into your skills directory so that `SKILL.md` ends up at
-`~/.claude/skills/imdb/SKILL.md`:
+The directory must be named `imdb` — Claude Code takes the skill's name from
+the folder, so `SKILL.md` has to land at `~/.claude/skills/imdb/SKILL.md`.
 
 ```bash
 mkdir -p ~/.claude/skills
-unzip imdb-skill.zip -d ~/.claude/skills
+git clone https://github.com/kagel/imdb-skill.git ~/.claude/skills/imdb
+chmod +x ~/.claude/skills/imdb/scripts/*.sh
+```
+
+Later updates are then just `git -C ~/.claude/skills/imdb pull`.
+
+From a zip instead — note that GitHub's own "Download ZIP" unpacks as
+`imdb-skill-main/`, which is the wrong name, so rename it:
+
+```bash
+mkdir -p ~/.claude/skills
+unzip imdb-skill.zip -d ~/.claude/skills          # this repo's release zip: already named imdb/
+# if you used GitHub's Download ZIP button instead:
+#   unzip imdb-skill-main.zip -d ~/.claude/skills && mv ~/.claude/skills/imdb-skill-main ~/.claude/skills/imdb
 chmod +x ~/.claude/skills/imdb/scripts/*.sh
 ```
 

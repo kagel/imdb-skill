@@ -1,6 +1,6 @@
 ---
 name: imdb
-description: Query the full IMDb dataset locally with DuckDB — 12.7M titles, 15.6M people, 101M credits, refreshed from IMDb's official daily dumps. Use when Dmitry says /imdb or asks anything about films, series, episodes, ratings, cast/crew, filmographies, genres, runtimes, or localized titles. Also handles refreshing the dataset and its housekeeping.
+description: Query the full IMDb dataset locally with DuckDB — 12.7M titles, 15.6M people, 101M credits, refreshed from IMDb's official daily dumps. Use when the user says /imdb or asks anything about films, series, episodes, ratings, cast/crew, filmographies, genres, runtimes, or localized titles. Also handles refreshing the dataset and its housekeeping.
 allowed-tools: Bash, Read
 ---
 
