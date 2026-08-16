@@ -266,6 +266,64 @@ WHERE c.nconst = 'nm0000138' AND t.titleType = 'movie'
 ORDER BY t.startYear;
 ```
 
+## Enriched queries (after `enrich.sh`)
+
+`q.sh` attaches the TMDb cache automatically — `tmdb` for en-US, `tmdb_ru_RU`
+for Russian.
+
+```sql
+-- what the dump cannot answer: what is this film about?
+SELECT m.primaryTitle, m.startYear, m.averageRating, t.overview
+FROM movies m JOIN tmdb.tmdb_titles t USING (tconst)
+WHERE m.tconst = 'tt1375666';
+```
+
+```sql
+-- IMDb rating vs TMDb rating; these are different audiences, not a check
+SELECT m.primaryTitle, m.averageRating AS imdb, m.numVotes,
+       t.vote_average AS tmdb, t.vote_count
+FROM movies m JOIN tmdb.tmdb_titles t USING (tconst)
+WHERE m.numVotes > 100000
+ORDER BY m.averageRating - t.vote_average DESC LIMIT 20;
+```
+
+```sql
+-- money: only present on rows fetched with --full, and 0 means "unknown"
+SELECT m.primaryTitle, m.startYear, t.budget, t.revenue,
+       round(t.revenue::DOUBLE / nullif(t.budget, 0), 2) AS multiple
+FROM movies m JOIN tmdb.tmdb_titles t USING (tconst)
+WHERE t.budget > 1000000 AND t.revenue > 0
+ORDER BY multiple DESC LIMIT 20;
+```
+
+```sql
+-- where to watch in Russia, IMDb rating as the sort
+SELECT m.primaryTitle, m.averageRating, p.kind, p.provider
+FROM movies m
+JOIN tmdb.tmdb_providers p USING (tconst)
+WHERE p.country = 'RU' AND m.numVotes > 50000
+ORDER BY m.averageRating DESC, m.primaryTitle LIMIT 30;
+```
+
+```sql
+-- Russian descriptions alongside the English ones
+SELECT m.primaryTitle, ru.title AS ru_title, ru.overview AS ru_overview
+FROM movies m JOIN tmdb_ru_RU.tmdb_titles ru USING (tconst)
+WHERE m.numVotes > 200000 LIMIT 10;
+```
+
+```sql
+-- what is still unenriched in a selection, and what TMDb simply lacks
+SELECT
+  count(*) AS selected,
+  count(t.tconst) AS enriched,
+  count(x.tconst) AS known_absent_from_tmdb
+FROM movies m
+LEFT JOIN tmdb.tmdb_titles t USING (tconst)
+LEFT JOIN tmdb.tmdb_misses x USING (tconst)
+WHERE m.startYear = 2026 AND m.numVotes > 10000;
+```
+
 ## Export
 
 ```bash

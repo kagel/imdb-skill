@@ -59,6 +59,77 @@ leaves the previous database byte-identical. Raw dumps are deleted after a
 successful build, so the footprint stays at 3.5 GB, not 5.4 GB. Needs ~8 GB
 free and refuses rather than filling the disk.
 
+## TMDb enrichment (optional)
+
+The dumps have no plots, posters, budgets or streaming availability. `enrich.sh`
+fills exactly those gaps from TMDb into a **separate cache database**, because
+`refresh.sh` replaces `imdb.duckdb` wholesale and enrichment has to survive that.
+
+```bash
+$S/enrich.sh --dry-run --top 5000     # how many would actually be fetched
+$S/enrich.sh --top 500                # 1 request each: overview, poster, TMDb rating
+$S/enrich.sh --top 200 --full         # + runtime, budget, revenue, keywords, collection
+$S/enrich.sh --top 100 --providers    # + where to watch (implies --full)
+$S/enrich.sh --sql "SELECT tconst FROM imdb.movies WHERE startYear=2026 AND numVotes>10000"
+$S/enrich.sh --tconst tt1375666,tt0111161
+$S/enrich.sh --top 500 --lang ru-RU   # Russian overviews, into their own cache file
+```
+
+**Requires a free TMDb token** (themoviedb.org → Settings → API, instant for
+personal use) in `$TMDB_TOKEN` or `~/.local/share/imdb/tmdb.token`. A v4 read
+access token or a v3 API key both work. Also needs `python3` — standard library
+only, no pip/uv/venv.
+
+`q.sh` attaches every cache it finds, so joins just work with no setup:
+
+```sql
+SELECT m.primaryTitle, m.averageRating, t.overview, t.budget, t.revenue
+FROM movies m JOIN tmdb.tmdb_titles t USING (tconst)
+WHERE m.numVotes > 100000 ORDER BY t.revenue DESC NULLS LAST LIMIT 10;
+```
+
+`tmdb-en-US.duckdb` attaches as `tmdb`; any other language as `tmdb_ru_RU`
+and so on. Tables: `tmdb_titles`, `tmdb_providers` (tconst, country, kind,
+provider), `tmdb_misses`, `tmdb_meta`.
+
+### Fetching effectively — the rules the script encodes
+
+- **One request per title by default.** `/find/{tconst}?external_source=imdb_id`
+  returns the whole movie object, so the description, poster, TMDb rating and
+  tmdb_id all arrive in a single call. `--full` costs a second request but
+  collapses what would be five into one via `append_to_response`, which takes
+  up to 20 sub-requests per call.
+- **A shared token bucket holds the pool to `--rps` (default 30).** TMDb's
+  ceiling is ~40 req/s and there is no daily cap. Workers (`--workers`, default
+  12) exist to hide latency, not to exceed the limit. 429 is honoured via
+  `Retry-After`, 5xx backs off exponentially.
+- **Nothing already cached and fresh is re-requested.** The work list is an
+  anti-join against the cache, so re-running the same command fetches zero.
+- **Misses are cached too.** A tconst TMDb does not have (or that is a series,
+  recorded with `reason='series'`) goes into `tmdb_misses`; without that, every
+  run re-requests the millions of IMDb ids TMDb has never heard of.
+- **Asking for more depth re-fetches.** A row cached by `/find` alone does not
+  satisfy `--full`; it is re-fetched, while the same title without `--full`
+  stays cached.
+
+### TTLs — two clocks, on purpose
+
+| Data | Changes | Default | Flag |
+|---|---|---:|---|
+| overview, poster, budget, revenue, genres, collection | essentially never after release | **30 days** | `--ttl` |
+| watch providers | streaming rights rotate constantly | **7 days** | `--providers-ttl` |
+| negative cache (not on TMDb) | rarely appears later | **30 days** | `--miss-ttl` |
+
+A single one-week TTL would re-download thousands of descriptions that cannot
+have changed. `--refresh` ignores all three.
+
+### What enrichment does not fix
+
+`vote_average` is **TMDb's own rating, not IMDb's** — never present it as an
+IMDb score; the IMDb rating is already local in `title_ratings`. Coverage is
+partial: obscure titles, most tvEpisodes and much of pre-1960 cinema are simply
+not on TMDb, which is what `tmdb_misses` records.
+
 ## Tables
 
 Column names are IMDb's own camelCase, so IMDb's docs map 1:1. DuckDB

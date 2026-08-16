@@ -69,6 +69,31 @@ $S/q.sh --csv "SELECT ..." > out.csv
 $S/q.sh --info                # what's loaded and how fresh
 ```
 
+## Optional: TMDb enrichment
+
+The IMDb dumps carry no plots, posters, budgets or streaming availability.
+`enrich.sh` fetches those from TMDb into a **separate** cache database, so a
+`refresh.sh` rebuild never wipes them.
+
+```bash
+scripts/enrich.sh --dry-run --top 5000   # how many would be fetched
+scripts/enrich.sh --top 500              # one request per title
+scripts/enrich.sh --top 100 --providers  # + budgets, keywords, where to watch
+scripts/enrich.sh --top 500 --lang ru-RU # Russian descriptions
+```
+
+Needs a free TMDb token (themoviedb.org → Settings → API — instant for personal
+use) in `$TMDB_TOKEN` or `~/.local/share/imdb/tmdb.token`, and `python3`
+(standard library only — nothing to install). Re-running fetches only what is
+missing or stale: 30-day TTL for descriptions, 7-day for streaming providers,
+and titles TMDb does not have are cached as misses so they are not re-requested.
+
+Afterwards `q.sh` joins the two automatically:
+
+```bash
+scripts/q.sh "SELECT m.primaryTitle, t.overview FROM movies m JOIN tmdb.tmdb_titles t USING (tconst) LIMIT 5"
+```
+
 ## Keeping it fresh
 
 IMDb republishes the dumps daily, around 00:40 UTC.

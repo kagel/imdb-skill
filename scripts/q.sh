@@ -42,4 +42,15 @@ else
   SQL=$(cat)
 fi
 
-exec duckdb -readonly "$FMT" "$DB" <<<"$SQL"
+# Any TMDb enrichment cache is attached read-only so joins just work:
+#   tmdb-en-US.duckdb -> schema "tmdb"      (SELECT ... FROM tmdb.tmdb_titles)
+#   tmdb-ru-RU.duckdb -> schema "tmdb_ru_RU"
+ATTACHES=""
+for f in "$DATA_DIR"/tmdb-*.duckdb; do
+  [[ -e "$f" ]] || continue
+  tag=${f##*/tmdb-}; tag=${tag%.duckdb}
+  if [[ "$tag" == "en-US" ]]; then alias=tmdb; else alias="tmdb_${tag//[^A-Za-z0-9]/_}"; fi
+  ATTACHES+="ATTACH IF NOT EXISTS '$f' AS $alias (READ_ONLY);"$'\n'
+done
+
+exec duckdb -readonly "$FMT" "$DB" <<<"$ATTACHES$SQL"
