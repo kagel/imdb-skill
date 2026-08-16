@@ -82,11 +82,32 @@ scripts/enrich.sh --top 100 --providers  # + budgets, keywords, where to watch
 scripts/enrich.sh --top 500 --lang ru-RU # Russian descriptions
 ```
 
-Needs a free TMDb token (themoviedb.org → Settings → API — instant for personal
-use) in `$TMDB_TOKEN` or `~/.local/share/imdb/tmdb.token`, and `python3`
-(standard library only — nothing to install). Re-running fetches only what is
-missing or stale: 30-day TTL for descriptions, 7-day for streaming providers,
-and titles TMDb does not have are cached as misses so they are not re-requested.
+### Getting and storing a TMDb token
+
+Free and instant. Use a **desktop** browser — TMDb's API signup is not
+mobile-friendly.
+
+1. Sign up: <https://www.themoviedb.org/signup>
+2. Go to <https://www.themoviedb.org/settings/api>
+3. Request a key, accept the terms, choose **Personal / non-commercial**
+   (approved immediately)
+4. Copy the **API Read Access Token** — the long value starting with `ey…`
+
+Store it outside this repository — a token committed here would be published:
+
+```bash
+echo '<your token>' > ~/.local/share/imdb/tmdb.token
+chmod 600 ~/.local/share/imdb/tmdb.token
+```
+
+Alternatives: `export TMDB_TOKEN='<token>'` for a single session, or
+`export TMDB_TOKEN_FILE=~/path/to/your/secrets/tmdb.token` to keep it wherever
+you already keep credentials.
+
+Also needs `python3` (standard library only — nothing to install). Re-running
+fetches only what is missing or stale: 30-day TTL for descriptions, 7-day for
+streaming providers, and titles TMDb does not have are cached as misses so they
+are not re-requested.
 
 Afterwards `q.sh` joins the two automatically:
 

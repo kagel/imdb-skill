@@ -1,1 +1,10 @@
 .DS_Store
+
+# Credentials must never live in this directory — it is a git repository and
+# the remote is public. These patterns are a safety net, not a place to put
+# them: the token belongs in $IMDB_DATA_DIR (~/.local/share/imdb), which is
+# outside any repo. See "TMDb token" in SKILL.md.
+*.token
+*.env
+*.key
+secrets/

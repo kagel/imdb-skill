@@ -75,10 +75,54 @@ $S/enrich.sh --tconst tt1375666,tt0111161
 $S/enrich.sh --top 500 --lang ru-RU   # Russian overviews, into their own cache file
 ```
 
-**Requires a free TMDb token** (themoviedb.org → Settings → API, instant for
-personal use) in `$TMDB_TOKEN` or `~/.local/share/imdb/tmdb.token`. A v4 read
-access token or a v3 API key both work. Also needs `python3` — standard library
-only, no pip/uv/venv.
+Needs a free TMDb token (see below) and `python3` — standard library only, no
+pip/uv/venv.
+
+### Getting a TMDb token
+
+Free, instant, no card. **Use a desktop browser** — TMDb states the API
+signup is not optimized for mobile.
+
+1. Create an account: <https://www.themoviedb.org/signup> (email confirmation).
+2. Open <https://www.themoviedb.org/settings/api> — the API link in account
+   settings.
+3. Request a key, accept the [terms of use](https://www.themoviedb.org/documentation/api/terms-of-use),
+   and choose the **Personal / non-commercial** option. Personal requests are
+   approved immediately; a commercial one asks for company details and is
+   reviewed.
+4. That page then shows **two** credentials. Copy the **API Read Access
+   Token** — the long JWT starting with `ey…`. It is the one TMDb recommends,
+   works for both v3 and v4, and goes in an `Authorization: Bearer` header.
+   (The short *API Key* also works; the script detects which one it was given
+   and switches between header and query parameter automatically.)
+
+Non-commercial use requires attribution if you publish anything built on it:
+the TMDB logo plus "This product uses the TMDB API but is not endorsed or
+certified by TMDB".
+
+### Where to put it
+
+**Never inside this skill directory** — it is a git repository with a public
+remote, so a token dropped here can be committed and published. `.gitignore`
+blocks `*.token`/`*.env` as a safety net, but the correct place is outside the
+repo entirely.
+
+```bash
+# preferred: next to the data, outside any repo
+echo 'eyJhbGciOi...' > ~/.local/share/imdb/tmdb.token
+chmod 600 ~/.local/share/imdb/tmdb.token
+```
+
+The script resolves the token in this order:
+
+| Source | Use it when |
+|---|---|
+| `$TMDB_TOKEN` | one-off run, CI, or a shell you do not want to persist it in |
+| `$TMDB_TOKEN_FILE` | you keep secrets somewhere central — point it at that file |
+| `$IMDB_DATA_DIR/tmdb.token` | the default; `~/.local/share/imdb/tmdb.token` |
+
+Running `enrich.sh` without a token prints these steps and exits 1 without
+creating anything. `--dry-run` works with no token at all.
 
 `q.sh` attaches every cache it finds, so joins just work with no setup:
 

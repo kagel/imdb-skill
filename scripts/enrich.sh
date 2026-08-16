@@ -18,8 +18,9 @@
 # TTL, or when a mode is requested that the cached row does not satisfy (asking
 # for --full when only a /find record is cached). Misses are cached too.
 #
-# Token: $TMDB_TOKEN, or $IMDB_DATA_DIR/tmdb.token. A v4 read access token
-# (starts with "ey") or a v3 API key both work.
+# Token, in resolution order: $TMDB_TOKEN, $TMDB_TOKEN_FILE, or
+# $IMDB_DATA_DIR/tmdb.token. A v4 read access token (starts with "ey") or a v3
+# API key both work. Run without one to get setup instructions.
 set -euo pipefail
 
 DATA_DIR="${IMDB_DATA_DIR:-$HOME/.local/share/imdb}"
@@ -71,16 +72,33 @@ fi
 
 # Token first, so a token-less run fails before creating any files. A dry run
 # needs the cache to anti-join against, but never needs a token.
+# Resolution order: $TMDB_TOKEN -> $TMDB_TOKEN_FILE -> $DATA_DIR/tmdb.token
 TOKEN="${TMDB_TOKEN:-}"
-if [[ -z "$TOKEN" && -f "$DATA_DIR/tmdb.token" ]]; then TOKEN=$(tr -d '[:space:]' < "$DATA_DIR/tmdb.token"); fi
+if [[ -z "$TOKEN" && -n "${TMDB_TOKEN_FILE:-}" && -f "$TMDB_TOKEN_FILE" ]]; then
+  TOKEN=$(tr -d '[:space:]' < "$TMDB_TOKEN_FILE")
+fi
+if [[ -z "$TOKEN" && -f "$DATA_DIR/tmdb.token" ]]; then
+  TOKEN=$(tr -d '[:space:]' < "$DATA_DIR/tmdb.token")
+fi
 if [[ -z "$TOKEN" ]] && (( ! DRY )); then
-  cat >&2 <<'EOF'
-No TMDb token. Get one free (personal use, instant):
-  themoviedb.org account -> Settings -> API -> request a key
-Then either:
-  export TMDB_TOKEN='<v4 read access token or v3 api key>'
-  echo '<token>' > "$IMDB_DATA_DIR/tmdb.token"   # default ~/.local/share/imdb/tmdb.token
-Or add --dry-run to see how many titles would be fetched without one.
+  cat >&2 <<EOF
+No TMDb token.
+
+Get one (free, instant, personal use — desktop browser, the signup is not
+mobile-friendly):
+  1. create an account at https://www.themoviedb.org/signup
+  2. open https://www.themoviedb.org/settings/api
+  3. request a key, accept the terms, pick "Personal" / non-commercial
+  4. copy the "API Read Access Token" (the long one starting with ey...)
+
+Then store it — NOT in this skill directory, which is a git repository:
+  echo '<token>' > "$DATA_DIR/tmdb.token" && chmod 600 "$DATA_DIR/tmdb.token"
+or point at your own secrets file:
+  export TMDB_TOKEN_FILE=~/path/to/tmdb.token
+or pass it for one run:
+  export TMDB_TOKEN='<token>'
+
+--dry-run shows how many titles would be fetched without needing a token.
 EOF
   exit 1
 fi
