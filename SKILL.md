@@ -69,7 +69,8 @@ fills exactly those gaps from TMDb into a **separate cache database**, because
 $S/enrich.sh --dry-run --top 5000     # how many would actually be fetched
 $S/enrich.sh --top 500                # 1 request each: overview, poster, TMDb rating
 $S/enrich.sh --top 200 --full         # + runtime, budget, revenue, keywords, collection
-$S/enrich.sh --top 100 --providers    # + where to watch (implies --full)
+$S/enrich.sh --top 100 --provider-countries RU,US   # + where to watch, those markets
+$S/enrich.sh --top 100 --providers    # every market — 700+ rows for a popular film
 $S/enrich.sh --sql "SELECT tconst FROM imdb.movies WHERE startYear=2026 AND numVotes>10000"
 $S/enrich.sh --tconst tt1375666,tt0111161
 $S/enrich.sh --top 500 --lang ru-RU   # Russian overviews, into their own cache file
@@ -109,7 +110,7 @@ repo entirely.
 
 ```bash
 # preferred: next to the data, outside any repo
-echo 'eyJhbGciOi...' > ~/.local/share/imdb/tmdb.token
+echo 'PASTE-YOUR-READ-ACCESS-TOKEN-HERE' > ~/.local/share/imdb/tmdb.token
 chmod 600 ~/.local/share/imdb/tmdb.token
 ```
 
@@ -169,10 +170,29 @@ have changed. `--refresh` ignores all three.
 
 ### What enrichment does not fix
 
-`vote_average` is **TMDb's own rating, not IMDb's** — never present it as an
-IMDb score; the IMDb rating is already local in `title_ratings`. Coverage is
-partial: obscure titles, most tvEpisodes and much of pre-1960 cinema are simply
-not on TMDb, which is what `tmdb_misses` records.
+Measured on the live API, 2026-08-16:
+
+- **`vote_average` is TMDb's own rating, not IMDb's.** Never present it as an
+  IMDb score; the IMDb rating is already local in `title_ratings`.
+- **A hit is not the same as data.** TMDb carries stub records: an obscure 1921
+  title returned a valid record with an empty overview, no genres and zero
+  runtime. Filter on `overview IS NOT NULL`, not on the row existing.
+- **TMDb writes 0, not null, for unknown runtime/budget/revenue.** The fetcher
+  normalises those three to NULL on the way in — otherwise every `avg(runtime)`
+  and "cheapest film" query is silently wrong. Values in the cache are already
+  clean; raw API output is not.
+- **Watch providers explode.** TMDb returns every market it knows: *The
+  Fellowship of the Ring* alone is **747 rows** across all countries and kinds.
+  Use `--provider-countries RU,US` unless you genuinely want all of them —
+  500 films × all markets is ~370k rows of cache for no benefit.
+- **Provider coverage is uneven and thin for new films.** Of 106 films dated
+  2026 with 10k+ votes, **none** had a Russian provider and only ~70 had a US
+  one — they are still in cinemas. Of 20 pre-2015 classics, 18 had Russian
+  providers (Kinopoisk, Okko, More TV, TvIgle). Treat "where to watch" as
+  reliable for catalogue, absent for current releases.
+- Obscure titles, most tvEpisodes and much of pre-1960 cinema are not on TMDb
+  at all, which is what `tmdb_misses` records. Among the 2,000 most-voted
+  movies there were **zero** misses.
 
 ## Tables
 

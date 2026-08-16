@@ -5,7 +5,8 @@
 #
 #   enrich.sh --top 500                    # 500 most-voted movies, 1 request each
 #   enrich.sh --top 200 --full             # + runtime, budget, keywords, collection
-#   enrich.sh --top 100 --providers        # + where to watch (implies --full)
+#   enrich.sh --top 100 --providers        # + where to watch, EVERY market
+#   enrich.sh --top 100 --provider-countries RU,US   # just those two markets
 #   enrich.sh --sql "SELECT tconst FROM imdb.movies WHERE startYear=2026 AND numVotes>10000"
 #   enrich.sh --tconst tt1375666,tt0111161
 #   enrich.sh --top 500 --lang ru-RU       # Russian overviews into a separate cache
@@ -28,7 +29,7 @@ DB="$DATA_DIR/imdb.duckdb"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 LANG_TAG="en-US"; TOP=""; SEL_SQL=""; TCONSTS=""
-FULL=0; PROVIDERS=0; DRY=0; REFRESH=0
+FULL=0; PROVIDERS=0; DRY=0; REFRESH=0; PROV_COUNTRIES=ALL
 TTL=30; PROV_TTL=7; MISS_TTL=30
 WORKERS=12; RPS=30
 
@@ -40,6 +41,7 @@ while [[ $# -gt 0 ]]; do
     --lang)          LANG_TAG="$2"; shift 2 ;;
     --full)          FULL=1; shift ;;
     --providers)     PROVIDERS=1; FULL=1; shift ;;
+    --provider-countries) PROV_COUNTRIES="$2"; PROVIDERS=1; FULL=1; shift 2 ;;
     --ttl)           TTL="$2"; shift 2 ;;
     --providers-ttl) PROV_TTL="$2"; shift 2 ;;
     --miss-ttl)      MISS_TTL="$2"; shift 2 ;;
@@ -140,7 +142,7 @@ if (( NEED == 0 )); then echo "cache is current, nothing to do"; exit 0; fi
 # ---------- fetch ----------
 PYARGS=(--token "$TOKEN" --lang "$LANG_TAG" --workers "$WORKERS" --rps "$RPS")
 (( FULL )) && PYARGS+=(--full)
-(( PROVIDERS )) && PYARGS+=(--providers)
+(( PROVIDERS )) && PYARGS+=(--providers --provider-countries "$PROV_COUNTRIES")
 python3 "$SCRIPT_DIR/tmdb_fetch.py" "${PYARGS[@]}" < "$WORK" > "$ND"
 
 # ---------- upsert ----------

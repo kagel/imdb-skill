@@ -111,6 +111,16 @@ def names(seq, key="name"):
     return [x[key] for x in (seq or []) if x.get(key)]
 
 
+def unknown_is_zero(v):
+    """TMDb writes 0, not null, for an unknown runtime/budget/revenue.
+
+    Storing the 0 makes every avg() and every "cheapest film" query quietly
+    wrong — a 1921 stub record would claim a runtime of zero minutes. No film
+    has any of these legitimately at 0, so 0 means "not recorded".
+    """
+    return None if v in (0, None) else v
+
+
 def fetch_one(client, tconst, lang, full, genre_map, providers):
     found = client.get(f"/find/{tconst}", {"external_source": "imdb_id", "language": lang})
     results = (found or {}).get("movie_results") or []
@@ -164,9 +174,9 @@ def fetch_one(client, tconst, lang, full, genre_map, providers):
                 "tagline": d.get("tagline") or None,
                 "overview": d.get("overview") or rec["overview"],
                 "status": d.get("status"),
-                "runtime": d.get("runtime"),
-                "budget": d.get("budget"),
-                "revenue": d.get("revenue"),
+                "runtime": unknown_is_zero(d.get("runtime")),
+                "budget": unknown_is_zero(d.get("budget")),
+                "revenue": unknown_is_zero(d.get("revenue")),
                 "homepage": d.get("homepage") or None,
                 "genres": names(d.get("genres")) or rec["genres"],
                 "production_countries": [c.get("iso_3166_1") for c in d.get("production_countries") or []],
@@ -179,6 +189,8 @@ def fetch_one(client, tconst, lang, full, genre_map, providers):
             if providers:
                 out = []
                 for country, blocks in ((d.get("watch/providers") or {}).get("results") or {}).items():
+                    if providers != "ALL" and country not in providers:
+                        continue
                     for kind in ("flatrate", "rent", "buy", "free", "ads"):
                         for p in blocks.get(kind) or []:
                             out.append({"country": country, "kind": kind,
@@ -194,11 +206,17 @@ def main():
     ap.add_argument("--full", action="store_true",
                     help="second request per title: runtime, budget, keywords, collection")
     ap.add_argument("--providers", action="store_true", help="watch providers (implies --full)")
+    ap.add_argument("--provider-countries", default="ALL",
+                    help="comma-separated ISO country codes, or ALL. TMDb returns every "
+                         "market it knows: one popular film can be 700+ rows.")
     ap.add_argument("--workers", type=int, default=12)
     ap.add_argument("--rps", type=float, default=30.0, help="TMDb's ceiling is ~40/s")
     ap.add_argument("--progress-every", type=int, default=200)
     args = ap.parse_args()
     full = args.full or args.providers
+    countries = ("ALL" if args.provider_countries.strip().upper() == "ALL"
+                 else {c.strip().upper() for c in args.provider_countries.split(",") if c.strip()})
+    want_providers = countries if args.providers else None
 
     tconsts = [l.strip() for l in sys.stdin if l.strip() and l.strip().startswith("tt")]
     if not tconsts:
@@ -220,7 +238,7 @@ def main():
     def work(tc):
         nonlocal done, hits, misses, errors
         try:
-            rec = fetch_one(client, tc, args.lang, full, genre_map, args.providers)
+            rec = fetch_one(client, tc, args.lang, full, genre_map, want_providers)
         except Exception as e:                      # noqa: BLE001 - report, keep going
             rec = {"_kind": "error", "tconst": tc, "reason": f"{type(e).__name__}: {e}"}
         with lock:
